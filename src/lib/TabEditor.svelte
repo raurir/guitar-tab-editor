@@ -31,6 +31,14 @@
   let suppressClick = false;
   let digitEntry = { id: -1, value: 0, at: 0 };
 
+  // Note ids restart on load, so stale ids would point at notes in the new song.
+  $effect.pre(() => {
+    void tab.generation;
+    selectedId = null;
+    drag = null;
+    digitEntry = { id: -1, value: 0, at: 0 };
+  });
+
   const selected = $derived(selectedId === null ? undefined : tab.get(selectedId));
 
   const perRow = $derived(Math.max(1, Math.floor((width - LABEL_W) / MEASURE_W)));

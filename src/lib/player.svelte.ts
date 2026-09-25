@@ -1,4 +1,4 @@
-import type { Tab } from './tab.svelte';
+import { clampTempo, type Tab } from './tab.svelte';
 
 const LOOKAHEAD_S = 0.12; // how far ahead notes are scheduled
 const TICK_MS = 25; // how often the scheduler wakes up
@@ -214,7 +214,7 @@ export class Player {
   }
 
   #stepDuration() {
-    return 60 / this.#tab.tempo / 4; // sixteenth notes
+    return 60 / clampTempo(this.#tab.tempo) / 4; // sixteenth notes
   }
 
   #tick = () => {

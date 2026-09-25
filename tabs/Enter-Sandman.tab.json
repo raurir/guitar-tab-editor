@@ -1,0 +1,43 @@
+{
+  "title": "Enter Sandman",
+  "tempo": 123,
+  "measures": 1,
+  "notes": [
+    {
+      "id": 1,
+      "string": 5,
+      "pos": 12,
+      "fret": 0
+    },
+    {
+      "id": 2,
+      "string": 4,
+      "pos": 0,
+      "fret": 7
+    },
+    {
+      "id": 3,
+      "string": 3,
+      "pos": 2,
+      "fret": 5
+    },
+    {
+      "id": 4,
+      "string": 5,
+      "pos": 4,
+      "fret": 6
+    },
+    {
+      "id": 5,
+      "string": 5,
+      "pos": 6,
+      "fret": 5
+    },
+    {
+      "id": 6,
+      "string": 4,
+      "pos": 10,
+      "fret": 7
+    }
+  ]
+}

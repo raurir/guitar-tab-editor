@@ -1,46 +1,43 @@
 <script lang="ts">
-  import { Tab, type TabData } from './lib/tab.svelte';
+  import { Tab, blankTab, MIN_TEMPO, MAX_TEMPO, type TabData } from './lib/tab.svelte';
   import TabEditor from './lib/TabEditor.svelte';
   import { Player } from './lib/player.svelte';
+  import { canWriteFiles, fileNameFor, openTabFile, saveTabFile } from './lib/files';
 
-  const STORAGE_KEY = 'guitar-tab-editor:v1';
   const PREFS_KEY = 'guitar-tab-editor:prefs';
 
   type Prefs = { volume: number; metal: boolean };
-
-  const DEMO: TabData = {
-    title: 'Untitled',
-    tempo: 100,
-    measures: 4,
-    notes: [
-      [5, 0, 0], [5, 2, 3], [4, 4, 0], [4, 6, 2],
-      [3, 8, 0], [3, 10, 2], [2, 12, 0], [2, 14, 2],
-    ].map(([string, pos, fret], i) => ({ id: i + 1, string, pos, fret })),
-  };
+  type FileState = { name: string | null; saved: string };
 
   const tab = new Tab();
-  tab.load(loadSaved() ?? DEMO);
+  tab.load(blankTab());
   const player = new Player(tab);
   const prefs = loadPrefs();
   player.volume = prefs.volume;
   player.metal = prefs.metal;
 
+  const BLANK = contentKey(blankTab());
+  let file = $state<FileState>({ name: null, saved: BLANK });
+  let fileHandle: FileSystemFileHandle | null = null;
+
+  const content = $derived(contentKey(tab.toJSON()));
+  const dirty = $derived(file.saved !== content);
+
+  /** Note ids are renumbered on load, so compare what the tab sounds like, not ids. */
+  function contentKey(d: TabData) {
+    return JSON.stringify([d.title, d.tempo, d.measures, d.notes.map((n) => [n.string, n.pos, n.fret])]);
+  }
+
   function loadPrefs(): Prefs {
     const defaults: Prefs = { volume: 0.8, metal: false };
     try {
-      const raw = localStorage.getItem(PREFS_KEY);
-      return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+      const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null');
+      return {
+        volume: typeof p?.volume === 'number' && Number.isFinite(p.volume) ? p.volume : defaults.volume,
+        metal: typeof p?.metal === 'boolean' ? p.metal : defaults.metal,
+      };
     } catch {
       return defaults;
-    }
-  }
-
-  function loadSaved(): TabData | null {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
     }
   }
 
@@ -49,23 +46,90 @@
     try {
       localStorage.setItem(PREFS_KEY, data);
     } catch {
-      // ignore
+      // storage unavailable — prefs just won't be remembered
     }
   });
 
-  $effect(() => {
-    const data = JSON.stringify(tab.toJSON());
+  function confirmDiscard() {
+    return !dirty || confirm('You have unsaved changes. Discard them?');
+  }
+
+  function newSong() {
+    if (!confirmDiscard()) return;
+    player.stop();
+    tab.load(blankTab());
+    file = { name: null, saved: BLANK };
+    fileHandle = null;
+  }
+
+  async function save(saveAs = false) {
+    // Capture now: the user can keep editing while the save dialog is open.
+    const data = tab.toJSON();
     try {
-      localStorage.setItem(STORAGE_KEY, data);
-    } catch {
-      // storage unavailable — editing still works, it just won't persist
+      const result = await saveTabFile(data, {
+        handle: fileHandle,
+        name: file.name ?? fileNameFor(data.title),
+        saveAs,
+      });
+      if (!result) return;
+      fileHandle = result.handle;
+      file = { name: result.name, saved: contentKey(data) };
+    } catch (e) {
+      alert(`Couldn't save: ${e instanceof Error ? e.message : e}`);
     }
-  });
+  }
+
+  async function open() {
+    try {
+      // Pick first, confirm after: browsers only allow the picker straight after a click.
+      const opened = await openTabFile();
+      if (!opened || !confirmDiscard()) return;
+      player.stop();
+      tab.load(opened.data);
+      fileHandle = opened.handle;
+      file = { name: opened.name, saved: contentKey(opened.data) };
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    // A held ⌘S would fire a second save while the first picker is still open.
+    if (!(e.metaKey || e.ctrlKey) || e.repeat) return;
+    const key = e.key.toLowerCase();
+    if (key === 's') {
+      e.preventDefault();
+      save(e.shiftKey);
+    } else if (key === 'o') {
+      e.preventDefault();
+      open();
+    }
+  }
+
+  // Nothing is autosaved any more, so warn before closing or reloading with unsaved work.
+  function onBeforeUnload(e: BeforeUnloadEvent) {
+    if (dirty) e.preventDefault();
+  }
 </script>
+
+<svelte:window onkeydown={onKeyDown} onbeforeunload={onBeforeUnload} />
 
 <main>
   <header class="toolbar">
     <input class="title" bind:value={tab.title} aria-label="Title" />
+
+    <div class="group">
+      <button type="button" onclick={newSong}>New</button>
+      <button type="button" onclick={open} title="Open (⌘O)">Open…</button>
+      <button type="button" class="save" class:dirty onclick={() => save()}
+        title={canWriteFiles ? 'Save (⌘S)' : 'Download a copy (⌘S)'}>Save</button>
+      {#if canWriteFiles}
+        <button type="button" onclick={() => save(true)} title="Save As (⌘⇧S)">Save As…</button>
+      {/if}
+      {#if file.name}
+        <span class="file-name" title={file.name}>{file.name}</span>
+      {/if}
+    </div>
 
     <div class="group">
       <button type="button" class="play" class:active={player.playing} onclick={() => player.toggle()}>
@@ -104,7 +168,7 @@
     <div class="group">
       <label class="field">
         <span>BPM</span>
-        <input type="number" min="30" max="300" bind:value={tab.tempo} />
+        <input type="number" min={MIN_TEMPO} max={MAX_TEMPO} bind:value={tab.tempo} />
       </label>
     </div>
 
@@ -135,6 +199,8 @@
     <span><kbd>Shift</kbd>+<kbd>↑↓</kbd> fret ±1</span>
     <span><kbd>Del</kbd> / right-click remove</span>
     <span><kbd>⌘Z</kbd> undo</span>
+    <span><kbd>⌘S</kbd> save</span>
+    <span><kbd>⌘O</kbd> open</span>
   </footer>
 </main>
 
@@ -209,6 +275,24 @@
 
   .play {
     min-width: 76px;
+  }
+
+  .save {
+    min-width: 64px;
+  }
+
+  .file-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .save.dirty::after {
+    content: ' •';
+    color: var(--accent);
   }
 
   button.active {
