@@ -4,6 +4,8 @@ A browser-based guitar tab editor with playback, built with Svelte 5 and Vite.
 
 Entirely vibe coded.
 
+https://raurir.com/apps/guitar-tab-editor/
+
 ## Development
 
 ```sh
