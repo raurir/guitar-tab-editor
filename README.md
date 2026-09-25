@@ -2,6 +2,8 @@
 
 A browser-based guitar tab editor with playback, built with Svelte 5 and Vite.
 
+Entirely vibe coded.
+
 ## Development
 
 ```sh
