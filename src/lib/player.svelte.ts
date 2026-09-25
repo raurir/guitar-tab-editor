@@ -5,6 +5,8 @@ const TICK_MS = 25; // how often the scheduler wakes up
 const START_DELAY_S = 0.05;
 const VELOCITY = 0.5;
 const RELEASE_S = 0.015; // time constant for muting a ringing string
+const METAL_LEVEL = 0.3; // distorted signal is much hotter than clean, so trim it to match
+const SWITCH_S = 0.03; // crossfade time constant when toggling metal mode
 
 type Voice = { src: AudioBufferSourceNode; gain: GainNode };
 
@@ -55,6 +57,34 @@ function synthPluck(ctx: BaseAudioContext, midi: number) {
   return { buffer, rate: (freq * (period + 0.5)) / sr };
 }
 
+/** Asymmetric tanh soft-clip; the asymmetry adds even harmonics like a tube stage. */
+function distortionCurve(amount: number, samples = 2048) {
+  const curve = new Float32Array(samples);
+  const norm = Math.tanh(amount);
+  for (let i = 0; i < samples; i++) {
+    const x = (i / (samples - 1)) * 2 - 1;
+    curve[i] = x >= 0 ? Math.tanh(amount * x) / norm : Math.tanh(amount * 0.8 * x) / Math.tanh(amount * 0.8);
+  }
+  return curve;
+}
+
+/**
+ * High-gain amp: tighten the lows, drive hard into a clipper, scoop the mids,
+ * then roll off the fizz the way a 4x12 cab would.
+ */
+function metalAmp(ctx: BaseAudioContext, output: AudioNode) {
+  const tighten = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 110, Q: 0.7 });
+  const drive = new GainNode(ctx, { gain: 6 });
+  const shaper = new WaveShaperNode(ctx, { curve: distortionCurve(18), oversample: '4x' });
+  const chug = new BiquadFilterNode(ctx, { type: 'lowshelf', frequency: 140, gain: 6 });
+  const scoop = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 700, Q: 0.9, gain: -7 });
+  const presence = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 2400, Q: 1, gain: 4 });
+  const cab1 = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 5000, Q: 0.7 });
+  const cab2 = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 5000, Q: 0.7 });
+  tighten.connect(drive).connect(shaper).connect(chug).connect(scoop).connect(presence).connect(cab1).connect(cab2).connect(output);
+  return tighten;
+}
+
 export class Player {
   playing = $state(false);
   loop = $state(false);
@@ -63,8 +93,12 @@ export class Player {
 
   #tab: Tab;
   #volume = $state(0.8);
+  #metal = $state(false);
   #ctx: AudioContext | null = null;
-  #out: GainNode | null = null;
+  #bus: GainNode | null = null; // every voice feeds this
+  #out: GainNode | null = null; // master volume
+  #clean: GainNode | null = null;
+  #dirty: GainNode | null = null;
   #plucks = new Map<number, { buffer: AudioBuffer; rate: number }>();
   #strings: (Voice | null)[] = [];
   #preview: Voice | null = null;
@@ -93,6 +127,20 @@ export class Player {
     }
   }
 
+  /** Routes everything through a high-gain distortion amp. */
+  get metal() {
+    return this.#metal;
+  }
+
+  set metal(on: boolean) {
+    this.#metal = on;
+    if (this.#ctx && this.#clean && this.#dirty) {
+      const t = this.#ctx.currentTime;
+      this.#clean.gain.setTargetAtTime(on ? 0 : 1, t, SWITCH_S);
+      this.#dirty.gain.setTargetAtTime(on ? METAL_LEVEL : 0, t, SWITCH_S);
+    }
+  }
+
   // Squared so the slider feels even to the ear rather than bunched at the top.
   #gainFor(v: number) {
     return v * v;
@@ -106,8 +154,20 @@ export class Player {
       const tone = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 6000, Q: 0.5 });
       const limiter = new DynamicsCompressorNode(ctx, { threshold: -10, ratio: 8 });
       gain.connect(tone).connect(limiter).connect(ctx.destination);
+
+      // Clean and metal paths both run all the time; toggling crossfades between them.
+      const bus = new GainNode(ctx);
+      const clean = new GainNode(ctx, { gain: this.#metal ? 0 : 1 });
+      const dirty = new GainNode(ctx, { gain: this.#metal ? METAL_LEVEL : 0 });
+      bus.connect(clean).connect(gain);
+      bus.connect(metalAmp(ctx, dirty));
+      dirty.connect(gain);
+
       this.#ctx = ctx;
+      this.#bus = bus;
       this.#out = gain;
+      this.#clean = clean;
+      this.#dirty = dirty;
     }
     if (this.#ctx.state === 'suspended') void this.#ctx.resume();
     return this.#ctx;
@@ -207,7 +267,7 @@ export class Player {
     }
     const src = new AudioBufferSourceNode(ctx, { buffer: pluck.buffer, playbackRate: pluck.rate });
     const gain = new GainNode(ctx, { gain: VELOCITY });
-    src.connect(gain).connect(this.#out!);
+    src.connect(gain).connect(this.#bus!);
     src.start(time);
     return { src, gain };
   }

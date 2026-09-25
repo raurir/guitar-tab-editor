@@ -4,7 +4,9 @@
   import { Player } from './lib/player.svelte';
 
   const STORAGE_KEY = 'guitar-tab-editor:v1';
-  const VOLUME_KEY = 'guitar-tab-editor:volume';
+  const PREFS_KEY = 'guitar-tab-editor:prefs';
+
+  type Prefs = { volume: number; metal: boolean };
 
   const DEMO: TabData = {
     title: 'Untitled',
@@ -19,14 +21,17 @@
   const tab = new Tab();
   tab.load(loadSaved() ?? DEMO);
   const player = new Player(tab);
-  player.volume = loadVolume();
+  const prefs = loadPrefs();
+  player.volume = prefs.volume;
+  player.metal = prefs.metal;
 
-  function loadVolume() {
+  function loadPrefs(): Prefs {
+    const defaults: Prefs = { volume: 0.8, metal: false };
     try {
-      const v = Number(localStorage.getItem(VOLUME_KEY));
-      return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(v) ? v : 0.8;
+      const raw = localStorage.getItem(PREFS_KEY);
+      return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
     } catch {
-      return 0.8;
+      return defaults;
     }
   }
 
@@ -40,9 +45,9 @@
   }
 
   $effect(() => {
-    const volume = String(player.volume);
+    const data = JSON.stringify({ volume: player.volume, metal: player.metal } satisfies Prefs);
     try {
-      localStorage.setItem(VOLUME_KEY, volume);
+      localStorage.setItem(PREFS_KEY, data);
     } catch {
       // ignore
     }
@@ -68,6 +73,15 @@
       </button>
       <button type="button" class:active={player.loop} aria-pressed={player.loop} onclick={() => (player.loop = !player.loop)}>
         Loop
+      </button>
+      <button
+        type="button"
+        class="metal"
+        class:active={player.metal}
+        aria-pressed={player.metal}
+        onclick={() => (player.metal = !player.metal)}
+      >
+        🤘 Metal
       </button>
     </div>
 
@@ -201,6 +215,16 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-fg);
+  }
+
+  button.metal.active {
+    background: #b3121b;
+    border-color: #ff3b3b;
+    color: #fff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    box-shadow: 0 0 12px rgb(255 40 40 / 0.45);
   }
 
   .count {
