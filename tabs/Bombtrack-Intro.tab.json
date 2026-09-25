@@ -1,0 +1,97 @@
+{
+  "title": "Bombtrack Intro",
+  "tempo": 140,
+  "measures": 2,
+  "notes": [
+    {
+      "id": 1,
+      "string": 3,
+      "pos": 2,
+      "fret": 2
+    },
+    {
+      "id": 2,
+      "string": 3,
+      "pos": 4,
+      "fret": 0
+    },
+    {
+      "id": 3,
+      "string": 3,
+      "pos": 8,
+      "fret": 0
+    },
+    {
+      "id": 4,
+      "string": 5,
+      "pos": 0,
+      "fret": 0
+    },
+    {
+      "id": 5,
+      "string": 4,
+      "pos": 6,
+      "fret": 2
+    },
+    {
+      "id": 6,
+      "string": 4,
+      "pos": 10,
+      "fret": 2
+    },
+    {
+      "id": 7,
+      "string": 4,
+      "pos": 12,
+      "fret": 0
+    },
+    {
+      "id": 8,
+      "string": 5,
+      "pos": 14,
+      "fret": 3
+    },
+    {
+      "id": 9,
+      "string": 5,
+      "pos": 16,
+      "fret": 0
+    },
+    {
+      "id": 10,
+      "string": 3,
+      "pos": 18,
+      "fret": 2
+    },
+    {
+      "id": 11,
+      "string": 3,
+      "pos": 20,
+      "fret": 0
+    },
+    {
+      "id": 12,
+      "string": 4,
+      "pos": 22,
+      "fret": 2
+    },
+    {
+      "id": 13,
+      "string": 3,
+      "pos": 24,
+      "fret": 0
+    },
+    {
+      "id": 14,
+      "string": 3,
+      "pos": 26,
+      "fret": 2
+    },
+    {
+      "id": 15,
+      "string": 2,
+      "pos": 28,
+      "fret": 0
+    }
+  ]
+}
