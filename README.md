@@ -23,6 +23,10 @@ Keyboard shortcuts are listed at the bottom of the app.
 
 # Tabs
 
+Save these to disk and load, there is no url loader:
+
 https://raurir.com/apps/guitar-tab-editor/tabs/Bombtrack-Intro.tab.json
+
 https://raurir.com/apps/guitar-tab-editor/tabs/Enter-Sandman.tab.json
+
 https://raurir.com/apps/guitar-tab-editor/tabs/Haaland.tab.json
