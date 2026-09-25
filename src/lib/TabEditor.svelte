@@ -4,9 +4,10 @@
 
   let { tab, player }: { tab: Tab; player: Player } = $props();
 
-  const CELL_W = 24;
+  const MAX_CELL_W = 24;
+  const MIN_CELL_W = 18;
   const LABEL_W = 28;
-  const MEASURE_W = CELL_W * STEPS_PER_MEASURE;
+  const frets = Array.from({ length: MAX_FRET + 1 }, (_, i) => i);
   const DRAG_THRESHOLD = 4;
   const DIGIT_WINDOW_MS = 800;
 
@@ -41,7 +42,11 @@
 
   const selected = $derived(selectedId === null ? undefined : tab.get(selectedId));
 
-  const perRow = $derived(Math.max(1, Math.floor((width - LABEL_W) / MEASURE_W)));
+  const cellW = $derived(
+    Math.max(MIN_CELL_W, Math.min(MAX_CELL_W, Math.floor((width - LABEL_W) / STEPS_PER_MEASURE))),
+  );
+  const perRow = $derived(Math.max(1, Math.floor((width - LABEL_W) / (cellW * STEPS_PER_MEASURE))));
+  const shownFret = $derived(selected?.fret ?? brushFret);
   const rows = $derived.by(() => {
     const out: number[][] = [];
     for (let m = 0; m < tab.measures; m += perRow) {
@@ -119,6 +124,8 @@
   }
 
   function onClick(e: MouseEvent) {
+    // iOS only unlocks audio from a click/touchend, not pointerdown.
+    player.ensure();
     if (suppressClick) return;
     const cell = cellFrom(e.target);
     if (!cell) {
@@ -138,6 +145,8 @@
     const id = noteIdFrom(e.target);
     if (id === null) return;
     e.preventDefault();
+    // Android fires contextmenu on long-press, i.e. mid-drag.
+    if (drag) return;
     tab.remove(id);
     if (selectedId === id) selectedId = null;
   }
@@ -154,6 +163,21 @@
     if (note) player.pluck(note.string, note.fret);
   }
 
+  function pickFret(fret: number) {
+    brushFret = fret;
+    if (!selected) return;
+    tab.setFret(selected.id, fret);
+    player.pluck(selected.string, fret);
+  }
+
+  function removeSelected() {
+    if (!selected) return;
+    tab.remove(selected.id);
+    selectedId = null;
+  }
+
+  const measureStart = (pos: number) => pos - (pos % STEPS_PER_MEASURE);
+
   function onKeyDown(e: KeyboardEvent) {
     if ((e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
 
@@ -169,7 +193,7 @@
     if (e.key === ' ' && !mod) {
       e.preventDefault();
       // Shift+Space plays from the selected note's measure.
-      const from = e.shiftKey && selected ? selected.pos - (selected.pos % STEPS_PER_MEASURE) : 0;
+      const from = e.shiftKey && selected ? measureStart(selected.pos) : 0;
       player.toggle(from);
       return;
     }
@@ -232,7 +256,7 @@
   class="editor"
   class:dragging={drag?.moved}
   class:copying={drag?.moved && drag.copy}
-  style:--cell-w="{CELL_W}px"
+  style:--cell-w="{cellW}px"
   style:--label-w="{LABEL_W}px"
   bind:clientWidth={width}
   onpointerdown={onPointerDown}
@@ -293,18 +317,35 @@
   {/each}
 </div>
 
-<p class="status">
-  {#if selected}
-    <span>{tab.tuning[selected.string].name} string · measure {Math.floor(selected.pos / STEPS_PER_MEASURE) + 1}, step {(selected.pos % STEPS_PER_MEASURE) + 1} · fret {selected.fret}</span>
-  {:else}
-    <span>Nothing selected</span>
-  {/if}
-  <span class="muted">Click places fret {brushFret}</span>
-</p>
+<div class="selection-bar">
+  <div class="status">
+    {#if selected}
+      <span>
+        {tab.tuning[selected.string].name} string · bar {Math.floor(selected.pos / STEPS_PER_MEASURE) + 1}, step {(selected.pos % STEPS_PER_MEASURE) + 1}
+      </span>
+      <span class="actions">
+        <button type="button" onclick={() => player.play(measureStart(selected.pos))}>▶ From bar</button>
+        <button type="button" class="delete" onclick={removeSelected}>Delete</button>
+      </span>
+    {:else}
+      <span class="muted">No note selected · new notes use fret {brushFret}</span>
+    {/if}
+  </div>
+  <div class="frets" role="group" aria-label="Fret">
+    {#each frets as f}
+      <button type="button" class="fret" class:current={f === shownFret} onclick={() => pickFret(f)}>{f}</button>
+    {/each}
+  </div>
+</div>
 
 <style>
   .editor {
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overflow-x: auto;
     padding: 8px 0 16px;
   }
 
@@ -394,37 +435,40 @@
     background: var(--line);
   }
 
-  .cell.empty:hover::after {
-    content: attr(data-ghost);
-    position: relative;
-    font: 500 13px/1 var(--font-mono);
-    color: var(--accent);
-    opacity: 0.45;
-  }
+  @media (hover: hover) {
+    .cell.empty:hover::after {
+      content: attr(data-ghost);
+      position: relative;
+      font: 500 13px/1 var(--font-mono);
+      color: var(--accent);
+      opacity: 0.45;
+    }
 
-  .editor.dragging .cell.empty:hover::after {
-    content: none;
+    .editor.dragging .cell.empty:hover::after {
+      content: none;
+    }
+
+    .note:hover {
+      border-color: var(--accent);
+    }
   }
 
   .note {
     position: relative;
     z-index: 1;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 3px;
+    min-width: min(18px, var(--cell-w));
+    min-height: 0;
+    height: calc(var(--row-h) - 4px);
+    padding: 0 2px;
     border: 1px solid transparent;
     border-radius: 4px;
     background: var(--bg);
     color: var(--fg);
-    font: 600 13px/16px var(--font-mono);
+    font: 600 13px/1 var(--font-mono);
     text-align: center;
     cursor: grab;
     touch-action: none;
     transition: background-color 80ms, opacity 80ms;
-  }
-
-  .note:hover {
-    border-color: var(--accent);
   }
 
   .note.selected {
@@ -455,12 +499,56 @@
     color: var(--danger);
   }
 
+  .selection-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+
   .status {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin: 0;
+    gap: 8px 16px;
+    min-height: 32px;
     font-size: 13px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .delete {
+    color: var(--danger);
+  }
+
+  .frets {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  .fret {
+    flex: 0 0 auto;
+    min-width: 34px;
+    padding: 4px 0;
+    font: 600 13px var(--font-mono);
+  }
+
+  .fret.current {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
   }
 
   .muted {

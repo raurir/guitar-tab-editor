@@ -188,7 +188,13 @@
 
   <TabEditor {tab} {player} />
 
-  <footer class="help">
+  <footer class="help touch-help">
+    <span>Tap a line to add a note</span>
+    <span>Drag a note to move it</span>
+    <span>Tap a note, then a fret number to change it</span>
+  </footer>
+
+  <footer class="help key-help">
     <span><kbd>Space</kbd> play / stop</span>
     <span><kbd>Shift</kbd>+<kbd>Space</kbd> play from selection</span>
     <span><kbd>Click</kbd> add note</span>
@@ -231,9 +237,14 @@
     margin-left: -6px;
   }
 
-  .title:hover,
   .title:focus {
     border-color: var(--line);
+  }
+
+  @media (hover: hover) {
+    .title:hover {
+      border-color: var(--line);
+    }
   }
 
   .group {
@@ -324,6 +335,44 @@
     margin-top: 24px;
     font-size: 12px;
     color: var(--muted);
+  }
+
+  .touch-help {
+    display: none;
+  }
+
+  @media (pointer: coarse) {
+    .touch-help {
+      display: flex;
+    }
+
+    .key-help {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    main {
+      padding: 12px 12px 0;
+    }
+
+    .toolbar {
+      gap: 8px 12px;
+      padding-bottom: 12px;
+    }
+
+    .title {
+      flex-basis: 100%;
+      font-size: 20px;
+    }
+
+    .field input.volume {
+      width: 90px;
+    }
+
+    .file-name {
+      max-width: 120px;
+    }
   }
 
   kbd {
